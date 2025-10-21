@@ -33,12 +33,16 @@ io.on("connection", (socket) => {
       isScreenSharing: false
     });
     
-    console.log(`📞 ${socket.id} joined room ${roomId}. Total users: ${room.size}`);
+    console.log(`📞 ${userName || socket.id} joined room ${roomId}. Total users: ${room.size}`);
     
     // Send existing users to the new user
     const existingUsers = Array.from(room.entries())
       .filter(([id]) => id !== socket.id)
-      .map(([id, data]) => ({ userId: id, userName: data.userName, isScreenSharing: data.isScreenSharing }));
+      .map(([id, data]) => ({ 
+        userId: id, 
+        userName: data.userName, 
+        isScreenSharing: data.isScreenSharing 
+      }));
     
     socket.emit("existing-users", existingUsers);
     
@@ -51,10 +55,12 @@ io.on("connection", (socket) => {
 
   socket.on("signal", ({ roomId, signal, to }) => {
     io.to(to).emit("signal", { signal, from: socket.id });
+    console.log(`📡 Signal relayed from ${socket.id} to ${to}`);
   });
 
   socket.on("key-exchange", ({ roomId, publicKey, to }) => {
     io.to(to).emit("key-exchange", { publicKey, from: socket.id });
+    console.log(`🔐 Key exchanged between ${socket.id} and ${to}`);
   });
 
   socket.on("screen-share-status", ({ roomId, isSharing }) => {
@@ -66,6 +72,7 @@ io.on("connection", (socket) => {
           userId: socket.id,
           isSharing
         });
+        console.log(`📺 ${socket.id} screen sharing: ${isSharing}`);
       }
     });
   });
@@ -75,17 +82,18 @@ io.on("connection", (socket) => {
     
     rooms.forEach((room, roomId) => {
       if (room.has(socket.id)) {
+        const userName = room.get(socket.id).userName;
         room.delete(socket.id);
         
-        // Notify other users in the room
+        // Notify other users in the room that this user left
         socket.to(roomId).emit("user-left", socket.id);
         
-        console.log(`Room ${roomId} now has ${room.size} users`);
+        console.log(`👋 ${userName} left room ${roomId}. Remaining users: ${room.size}`);
         
         // Clean up empty rooms
         if (room.size === 0) {
           rooms.delete(roomId);
-          console.log(`Room ${roomId} deleted (empty)`);
+          console.log(`🗑️ Room ${roomId} deleted (empty)`);
         }
       }
     });
@@ -95,5 +103,6 @@ io.on("connection", (socket) => {
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`🚀 Signaling server running on http://localhost:${PORT}`);
-  console.log(`📡 Socket.IO is ready for multi-user connections`);
+  console.log(`📡 WebRTC mesh server ready (supports up to 10 users per room)`);
+  console.log(`🔒 CORS enabled for all origins`);
 });
