@@ -10,8 +10,8 @@ const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"]
-  }
+    methods: ["GET", "POST"],
+  },
 });
 
 const rooms = new Map();
@@ -21,35 +21,39 @@ io.on("connection", (socket) => {
 
   socket.on("join-room", ({ roomId, userName }) => {
     socket.join(roomId);
-    
+
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
     }
-    
+
     const room = rooms.get(roomId);
     room.set(socket.id, {
       socketId: socket.id,
       userName: userName || `User ${room.size + 1}`,
-      isScreenSharing: false
+      isScreenSharing: false,
     });
-    
-    console.log(`📞 ${userName || socket.id} joined room ${roomId}. Total users: ${room.size}`);
-    
+
+    console.log(
+      `📞 ${userName || socket.id} joined room ${roomId}. Total users: ${
+        room.size
+      }`
+    );
+
     // Send existing users to the new user
     const existingUsers = Array.from(room.entries())
       .filter(([id]) => id !== socket.id)
-      .map(([id, data]) => ({ 
-        userId: id, 
-        userName: data.userName, 
-        isScreenSharing: data.isScreenSharing 
+      .map(([id, data]) => ({
+        userId: id,
+        userName: data.userName,
+        isScreenSharing: data.isScreenSharing,
       }));
-    
+
     socket.emit("existing-users", existingUsers);
-    
+
     // Notify all other users about the new user
     socket.to(roomId).emit("user-joined", {
       userId: socket.id,
-      userName: room.get(socket.id).userName
+      userName: room.get(socket.id).userName,
     });
   });
 
@@ -70,26 +74,42 @@ io.on("connection", (socket) => {
         userData.isScreenSharing = isSharing;
         socket.to(rid).emit("peer-screen-share-status", {
           userId: socket.id,
-          isSharing
+          isSharing,
         });
         console.log(`📺 ${socket.id} screen sharing: ${isSharing}`);
       }
     });
   });
 
+  socket.on("mute-status", ({ roomId, isMuted }) => {
+    rooms.forEach((room, rid) => {
+      if (room.has(socket.id)) {
+        const userData = room.get(socket.id);
+        userData.isMuted = isMuted;
+        socket.to(rid).emit("peer-mute-status", {
+          userId: socket.id,
+          isMuted,
+        });
+        console.log(`🔇 ${socket.id} mute status:`, isMuted);
+      }
+    });
+  });
+
   socket.on("disconnect", () => {
     console.log("❌ User disconnected:", socket.id);
-    
+
     rooms.forEach((room, roomId) => {
       if (room.has(socket.id)) {
         const userName = room.get(socket.id).userName;
         room.delete(socket.id);
-        
+
         // Notify other users in the room that this user left
         socket.to(roomId).emit("user-left", socket.id);
-        
-        console.log(`👋 ${userName} left room ${roomId}. Remaining users: ${room.size}`);
-        
+
+        console.log(
+          `👋 ${userName} left room ${roomId}. Remaining users: ${room.size}`
+        );
+
         // Clean up empty rooms
         if (room.size === 0) {
           rooms.delete(roomId);
